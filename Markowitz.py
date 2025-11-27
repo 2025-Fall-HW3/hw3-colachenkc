@@ -62,7 +62,12 @@ class EqualWeightPortfolio:
         """
         TODO: Complete Task 1 Below
         """
+        n_assets = len(assets)
+        equal_w = np.ones(n_assets) / n_assets
 
+        self.portfolio_weights.loc[:, assets] = equal_w
+
+        self.portfolio_weights.loc[:, self.exclude] = 0.0
         """
         TODO: Complete Task 1 Above
         """
@@ -113,8 +118,27 @@ class RiskParityPortfolio:
         """
         TODO: Complete Task 2 Below
         """
+        # 使用 rolling window 的 inverse-vol 策略
+        for i in range(self.lookback + 1, len(df)):
+            window_ret = df_returns[assets].iloc[i - self.lookback : i]
 
+            sigma = window_ret.std()
+            # inverse volatility
+            inv_vol = 1.0 / sigma.replace(0, np.nan)
 
+            if np.isnan(inv_vol).all():
+                w = np.ones(len(assets)) / len(assets)
+            else:
+                inv_vol = inv_vol.fillna(0.0)
+                total = inv_vol.sum()
+                if total == 0:
+                    w = np.ones(len(assets)) / len(assets)
+                else:
+                    w = inv_vol / total  
+
+            self.portfolio_weights.loc[df.index[i], assets] = w.values
+
+        self.portfolio_weights.loc[:, self.exclude] = 0.0        
 
         """
         TODO: Complete Task 2 Above
@@ -190,8 +214,23 @@ class MeanVariancePortfolio:
 
                 # Sample Code: Initialize Decision w and the Objective
                 # NOTE: You can modify the following code
-                w = model.addMVar(n, name="w", ub=1)
-                model.setObjective(w.sum(), gp.GRB.MAXIMIZE)
+                # w = model.addMVar(n, name="w", ub=1)
+                # model.setObjective(w.sum(), gp.GRB.MAXIMIZE)
+
+                # w_i，0 <= w_i <= 1
+                w = model.addMVar(n, lb=0.0, ub=1.0, name="w")
+
+                # w^T mu
+                ret = mu @ w
+
+                # w^T Σ w
+                risk = w @ Sigma @ w
+
+                # max w^T mu - (gamma / 2) * w^T Σ w
+                obj = ret - 0.5 * gamma * risk
+                model.setObjective(obj, gp.GRB.MAXIMIZE)
+
+                model.addConstr(w.sum() == 1.0, name="budget")
 
                 """
                 TODO: Complete Task 3 Above
